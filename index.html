@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Agenda Kecamatan — Kalender</title>
+<style>
+  :root{
+    --bg:#f5f7fb; --card:#fff; --accent:#1e88e5; --muted:#6b7280;
+  }
+  *{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,Arial}
+  body{margin:0;background:var(--bg);color:#0f172a}
+  header{background:linear-gradient(90deg,#0ea5e9, #2563eb);color:white;padding:18px 24px}
+  header h1{margin:0;font-size:20px}
+  .wrap{max-width:1100px;margin:22px auto;padding:18px}
+  .top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .card{background:var(--card);border-radius:12px;padding:16px;box-shadow:0 6px 20px rgba(2,6,23,0.06)}
+  .controls{display:flex;gap:8px;align-items:center}
+  .btn{background:var(--accent);color:#fff;padding:8px 12px;border-radius:8px;border:0;cursor:pointer}
+  .btn.ghost{background:transparent;color:var(--accent);border:1px solid rgba(30,136,229,0.18)}
+  .monthTitle{font-weight:600;font-size:18px}
+  .weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:12px}
+  .weekday{padding:8px 6px;text-align:center;color:var(--muted);font-size:13px}
+  .calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:8px}
+  .dateCell{min-height:90px;border-radius:10px;padding:8px;position:relative;background:linear-gradient(180deg,#fff,#fbfdff);cursor:pointer;border:1px solid #eef2ff}
+  .dateCell.inactive{opacity:0.35}
+  .dateNum{font-weight:700;margin-bottom:6px}
+  .agendaDot{display:block;background:#ffd166;height:8px;width:8px;border-radius:99px;margin:4px 0}
+  .agendaItem{font-size:12px;padding:6px;margin-top:6px;border-radius:8px;background:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .badge{font-size:11px;padding:6px;border-radius:8px;background:#eef2ff;color:var(--accent);display:inline-block}
+  /* modal */
+  #modal{position:fixed;inset:0;background:rgba(2,6,23,0.45);display:none;align-items:center;justify-content:center;padding:18px}
+  .modalBox{width:720px;max-width:100%;background:var(--card);border-radius:12px;padding:16px;max-height:85vh;overflow:auto}
+  .modalHeader{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .field{margin-bottom:8px}
+  label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
+  input[type="text"], input[type="time"], textarea, select{
+    width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef9;background:#fff
+  }
+  .agendaList{margin-top:8px}
+  .agendaRow{display:flex;gap:8px;align-items:flex-start;padding:8px;border-radius:8px;border:1px solid #f1f5f9;margin-bottom:8px}
+  .agendaMeta{font-size:12px;color:var(--muted)}
+  .small{font-size:12px;color:var(--muted)}
+  footer{margin-top:20px;text-align:center;color:var(--muted);font-size:13px}
+  @media (max-width:760px){
+    .top{flex-direction:column;align-items:stretch;gap:10px}
+    .controls{justify-content:space-between}
+    .dateCell{min-height:80px}
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Agenda Kecamatan — Kalender</h1>
+  </header>
+
+  <div class="wrap">
+    <div class="top">
+      <div class="card" style="display:flex;gap:12px;align-items:center">
+        <div class="controls">
+          <button class="btn" id="prevBtn">&larr;</button>
+          <div class="monthTitle" id="monthYear"></div>
+          <button class="btn" id="nextBtn">&rarr;</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn ghost" id="exportCsvBtn">Export CSV</button>
+        <button class="btn" id="openToday">Hari Ini</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="weekdays">
+        <div class="weekday">Min</div>
+        <div class="weekday">Sen</div>
+        <div class="weekday">Sel</div>
+        <div class="weekday">Rab</div>
+        <div class="weekday">Kam</div>
+        <div class="weekday">Jum</div>
+        <div class="weekday">Sab</div>
+      </div>
+
+      <div class="calendar" id="calendarGrid"></div>
+    </div>
+
+    <footer class="card" style="margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <div class="small">Data akan dikirim ke Google Sheets jika Anda mengisi URL Apps Script. Jika tidak, data disimpan di browser (LocalStorage).</div>
+        <div class="small">Ganti <code>SCRIPT_URL</code> di kode dengan URL Web App Anda.</div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal">
+    <div class="modalBox card">
+      <div class="modalHeader">
+        <div>
+          <div style="font-weight:700" id="modalDateTitle">Tanggal</div>
+          <div class="small" id="modalDateSub">keterangan</div>
+        </div>
+        <div>
+          <button class="btn ghost" id="closeModal">Tutup</button>
+        </div>
+      </div>
+
+      <div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:220px">
+            <div class="field">
+              <label for="judul">Judul Agenda</label>
+              <input id="judul" placeholder="Contoh: Musrenbang, posyandu, rapat" />
+            </div>
+            <div style="display:flex;gap:8px">
+              <div style="flex:1" class="field">
+                <label for="jamMulai">Jam Mulai</label>
+                <input id="jamMulai" type="time" />
+              </div>
+              <div style="flex:1" class="field">
+                <label for="jamSelesai">Jam Selesai</label>
+                <input id="jamSelesai" type="time" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="lokasi">Lokasi / Penanggung Jawab</label>
+              <input id="lokasi" placeholder="Contoh: Kantor Kecamatan / Nama PJ" />
+            </div>
+            <div class="field">
+              <button class="btn" id="saveAgendaBtn">Simpan Agenda</button>
+            </div>
+          </div>
+
+          <div style="flex:1;min-width:260px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div style="font-weight:700">Agenda Hari Ini</div>
+              <div id="countAgenda" class="badge">0</div>
+            </div>
+            <div class="agendaList" id="agendaList"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+/* ================ KONFIGURASI ================
+Ganti SCRIPT_URL dengan URL Web App Anda hasil deploy Apps Script.
+Jika dibiarkan kosong (""), aplikasi akan menggunakan LocalStorage sebagai penyimpanan.
+Apps Script yang kompatibel:
+- GET  => mengembalikan JSON array of rows
+    contoh: [
+      ["2025-11-18","Judul A","08:00","09:00","Kantor"],
+      ...
+    ]
+- POST => menerima JSON: { date, agenda, jam_mulai, jam_selesai, lokasi }
+==============================================*/
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx1bb2uhbPOET0Cd2Ixj4QQx0N_fx_DCMl_LZnCrFWM6SNAOt8x8fzUaz-lEykpPXcd/exec"; // <-- ISI DENGAN URL APPS SCRIPT ANDA (contoh: "https://script.google.com/macros/s/AKfy.../exec")
+/* ============================================= */
+
+let current = new Date();
+let agendas = []; // local cache: array of objects {date, agenda, jam_mulai, jam_selesai, lokasi}
+
+/* utils */
+function toISODate(d){
+  const y=d.getFullYear(); const m=(d.getMonth()+1).toString().padStart(2,'0'); const day=d.getDate().toString().padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function parseRow(row){
+  // row coming from Apps Script: [date, agenda, jam_mulai, jam_selesai, lokasi]
+  return { date: row[0], agenda: row[1]||"", jam_mulai: row[2]||"", jam_selesai: row[3]||"", lokasi: row[4]||"" };
+}
+
+/* STORAGE: if SCRIPT_URL empty, use localStorage */
+const LS_KEY = "agenda_kecamatan_data_v1";
+
+async function loadFromServerOrLocal(){
+  if(!SCRIPT_URL){
+    const raw = localStorage.getItem(LS_KEY);
+    agendas = raw ? JSON.parse(raw) : [];
+    renderCalendar();
+    return;
+  }
+  try{
+    const res = await fetch(SCRIPT_URL);
+    const data = await res.json();
+    // data expected as array of arrays
+    agendas = data.map(parseRow);
+    // ensure dates are YYYY-MM-DD
+    agendas = agendas.filter(a=>a.date);
+    saveLocalCache(); // keep local copy
+    renderCalendar();
+  }catch(err){
+    console.warn("Gagal memuat dari server, menggunakan cache lokal.",err);
+    const raw = localStorage.getItem(LS_KEY);
+    agendas = raw ? JSON.parse(raw) : [];
+    renderCalendar();
+  }
+}
+
+function saveLocalCache(){
+  localStorage.setItem(LS_KEY, JSON.stringify(agendas));
+}
+
+async function sendToServer(item){
+  if(!SCRIPT_URL){
+    // local only
+    agendas.push(item);
+    saveLocalCache();
+    renderCalendar();
+    return { ok:true, source:"local" };
+  }
+  try{
+    const res = await fetch(SCRIPT_URL, {
+      method:"POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        date: item.date,
+        agenda: item.agenda,
+        jam_mulai: item.jam_mulai,
+        jam_selesai: item.jam_selesai,
+        lokasi: item.lokasi
+      })
+    });
+    const text = await res.text();
+    // After POST, re-load to sync (since Apps Script appends row)
+    await loadFromServerOrLocal();
+    return { ok:true, text };
+  }catch(err){
+    console.error("Gagal kirim ke server, simpan lokal sebagai fallback.",err);
+    // fallback: save locally
+    agendas.push(item);
+    saveLocalCache();
+    renderCalendar();
+    return { ok:false, error:err };
+  }
+}
+
+/* RENDER CALENDAR */
+const calendarGrid = document.getElementById("calendarGrid");
+const monthYear = document.getElementById("monthYear");
+
+function startOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
+function endOfMonth(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0); }
+
+function renderCalendar(){
+  calendarGrid.innerHTML = "";
+  const start = startOfMonth(current);
+  const end = endOfMonth(current);
+  monthYear.textContent = current.toLocaleString('id-ID',{month:'long', year:'numeric'});
+
+  // first weekday (Sun=0..Sat=6)
+  const lead = start.getDay();
+  const days = end.getDate();
+
+  // previous month's last days to fill grid (optional)
+  const prevLast = new Date(current.getFullYear(), current.getMonth(), 0).getDate();
+
+  // total cells (weeks) decide: at least lead + days
+  const totalCells = Math.ceil((lead + days) / 7) * 7;
+
+  for(let i=0;i<totalCells;i++){
+    const cell = document.createElement("div");
+    cell.className = "dateCell card";
+    const dayIndex = i - lead + 1;
+    let cellDate;
+    if(i < lead){
+      // previous month
+      const d = prevLast - (lead - 1) + i;
+      cellDate = new Date(current.getFullYear(), current.getMonth()-1, d);
+      cell.classList.add("inactive");
+    } else if(dayIndex > days){
+      // next month
+      const d = dayIndex - days;
+      cellDate = new Date(current.getFullYear(), current.getMonth()+1, d);
+      cell.classList.add("inactive");
+    } else {
+      cellDate = new Date(current.getFullYear(), current.getMonth(), dayIndex);
+    }
+
+    const iso = toISODate(cellDate);
+    const num = document.createElement("div");
+    num.className = "dateNum";
+    num.textContent = cellDate.getDate();
+    cell.appendChild(num);
+
+    // show up to 2 agenda items as preview
+    const items = agendas.filter(a=>a.date===iso);
+    for(let j=0;j<Math.min(2, items.length); j++){
+      const ai = document.createElement("div");
+      ai.className = "agendaItem";
+      ai.textContent = `${items[j].jam_mulai ? items[j].jam_mulai + ' - ' : ''}${items[j].agenda}`;
+      cell.appendChild(ai);
+    }
+    if(items.length>2){
+      const more = document.createElement("div");
+      more.className = "small";
+      more.style.marginTop="6px";
+      more.textContent = `+ ${items.length-2} lagi`;
+      cell.appendChild(more);
+    }
+
+    // highlight today
+    const todayIso = toISODate(new Date());
+    if(iso === todayIso){
+      const badge = document.createElement("div");
+      badge.className = "badge";
+      badge.style.marginTop="6px";
+      badge.textContent = "Hari Ini";
+      cell.appendChild(badge);
+    }
+
+    // click opens modal
+    cell.addEventListener("click", ()=> openModalForDate(iso));
+    calendarGrid.appendChild(cell);
+  }
+}
+
+/* MODAL / Interaction */
+const modal = document.getElementById("modal");
+const modalDateTitle = document.getElementById("modalDateTitle");
+const modalDateSub = document.getElementById("modalDateSub");
+const agendaListEl = document.getElementById("agendaList");
+const countAgenda = document.getElementById("countAgenda");
+
+let activeISO = toISODate(new Date());
+
+function openModalForDate(iso){
+  activeISO = iso;
+  const d = new Date(iso + "T00:00:00");
+  modalDateTitle.textContent = d.toLocaleDateString('id-ID', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+  modalDateSub.textContent = iso;
+  // reset form
+  document.getElementById("judul").value = "";
+  document.getElementById("jamMulai").value = "";
+  document.getElementById("jamSelesai").value = "";
+  document.getElementById("lokasi").value = "";
+  renderAgendaListForActiveDate();
+  modal.style.display = "flex";
+}
+
+function closeModal(){
+  modal.style.display = "none";
+}
+
+function renderAgendaListForActiveDate(){
+  const list = agendas.filter(a=>a.date===activeISO);
+  agendaListEl.innerHTML = "";
+  countAgenda.textContent = list.length;
+  if(list.length===0){
+    agendaListEl.innerHTML = `<div class="small">Belum ada agenda pada tanggal ini.</div>`;
+    return;
+  }
+  list.forEach((it, idx)=>{
+    const row = document.createElement("div");
+    row.className = "agendaRow";
+    const left = document.createElement("div");
+    left.style.flex="1";
+    const title = document.createElement("div");
+    title.style.fontWeight="600";
+    title.textContent = it.agenda;
+    const meta = document.createElement("div");
+    meta.className = "agendaMeta";
+    meta.textContent = `${it.jam_mulai || '-'} ${it.jam_selesai ? ' - '+it.jam_selesai : ''} • ${it.lokasi || '-'}`;
+    left.appendChild(title);
+    left.appendChild(meta);
+    row.appendChild(left);
+
+    // If using localStorage provide delete (for quick removal). For server-side delete, Apps Script must be extended.
+    const right = document.createElement("div");
+    right.style.display="flex"; right.style.gap="8px"; right.style.alignItems="center";
+    const del = document.createElement("button");
+    del.className="btn ghost";
+    del.style.padding="6px 8px";
+    del.textContent="Hapus";
+    del.addEventListener("click", ()=>{
+      if(confirm("Hapus agenda ini? (Jika menggunakan server, Anda perlu menambah endpoint delete di Apps Script)")){
+        // remove first matching item (best-effort)
+        const idxAll = agendas.findIndex(a=>a.date===it.date && a.agenda===it.agenda && a.jam_mulai===it.jam_mulai && a.lokasi===it.lokasi);
+        if(idxAll>-1){
+          agendas.splice(idxAll,1);
+          saveLocalCache();
+          renderAgendaListForActiveDate();
+          renderCalendar();
+        }
+      }
+    });
+    right.appendChild(del);
+    row.appendChild(right);
+
+    agendaListEl.appendChild(row);
+  });
+}
+
+/* Save action */
+document.getElementById("saveAgendaBtn").addEventListener("click", async ()=>{
+  const judul = document.getElementById("judul").value.trim();
+  if(!judul){ alert("Isi judul agenda."); return; }
+  const jamMulai = document.getElementById("jamMulai").value || "";
+  const jamSelesai = document.getElementById("jamSelesai").value || "";
+  const lokasi = document.getElementById("lokasi").value || "";
+  const item = { date: activeISO, agenda: judul, jam_mulai: jamMulai, jam_selesai: jamSelesai, lokasi: lokasi };
+  // push to server or local
+  document.getElementById("saveAgendaBtn").disabled = true;
+  document.getElementById("saveAgendaBtn").textContent = "Menyimpan...";
+  const res = await sendToServer(item);
+  document.getElementById("saveAgendaBtn").disabled = false;
+  document.getElementById("saveAgendaBtn").textContent = "Simpan Agenda";
+  if(res.ok){
+    // if local fallback, sendToServer already updated agendas; if server, loadFromServerOrLocal updated agendas
+    renderAgendaListForActiveDate();
+    renderCalendar();
+    alert("Agenda tersimpan.");
+  } else {
+    alert("Terjadi masalah saat menyimpan. Data tersimpan lokal.");
+  }
+});
+
+/* controls */
+document.getElementById("prevBtn").addEventListener("click", ()=>{
+  current = new Date(current.getFullYear(), current.getMonth()-1, 1);
+  renderCalendar();
+});
+document.getElementById("nextBtn").addEventListener("click", ()=>{
+  current = new Date(current.getFullYear(), current.getMonth()+1, 1);
+  renderCalendar();
+});
+document.getElementById("openToday").addEventListener("click", ()=>{
+  current = new Date();
+  renderCalendar();
+  openModalForDate(toISODate(new Date()));
+});
+document.getElementById("closeModal").addEventListener("click", closeModal);
+document.getElementById("modal").addEventListener("click", (e)=>{ if(e.target===modal) closeModal(); });
+
+/* Export CSV */
+function exportCSV(){
+  const header = ["date","agenda","jam_mulai","jam_selesai","lokasi"];
+  const rows = agendas.map(a => [a.date, a.agenda, a.jam_mulai, a.jam_selesai, a.lokasi]);
+  const all = [header, ...rows];
+  const csv = all.map(r => r.map(c=> `"${String(c||"").replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `agenda_kecamatan_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+document.getElementById("exportCsvBtn").addEventListener("click", exportCSV);
+
+/* init */
+loadFromServerOrLocal();
+renderCalendar();
+</script>
+</body>
+</html>
